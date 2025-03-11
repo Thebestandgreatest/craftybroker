@@ -5,6 +5,7 @@ import club.arson.impulse.api.server.Broker
 import club.arson.impulse.api.server.BrokerFactory
 import org.slf4j.Logger
 
+@Suppress("unused")
 class CraftyControllerBrokerFactory : BrokerFactory {
 
 	/**

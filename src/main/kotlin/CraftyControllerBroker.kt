@@ -13,8 +13,6 @@ import io.ktor.http.*
 import io.ktor.serialization.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.slf4j.Logger
 import java.net.InetSocketAddress
@@ -183,7 +181,7 @@ class CraftyControllerBroker(serverConfig: ServerConfig, private val logger: Log
 				}
 			}.body()
 		} catch (e: JsonConvertException) {
-			var responseString: String = client.request(craftyConfig.craftyAddress) {
+			val responseString: String = client.request(craftyConfig.craftyAddress) {
 				method = type.method
 				url {
 					appendPathSegments("api/v2/servers", craftyConfig.serverID, type.request)
@@ -194,6 +192,7 @@ class CraftyControllerBroker(serverConfig: ServerConfig, private val logger: Log
 					)
 				}
 			}.bodyAsText()
+			logger?.error("invalid json response from crafty api")
 			logger?.info(responseString)
 			response = Json.decodeFromString(responseString)
 		}
