@@ -9,5 +9,6 @@ data class CraftyControllerBrokerConfig(
 	var address: String? = null,
 	var serverID: String,
 	var token: String,
-	var craftyAddress: String = "https://localhost:8443"
+	var craftyAddress: String = "https://localhost:8443",
+	var insecureMode: Boolean = false
 )

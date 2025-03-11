@@ -1,4 +1,9 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+
 plugins {
+	java
+	id("com.gradleup.shadow") version "8.3.5"
+	application
 	kotlin("jvm") version "2.1.10"
 	kotlin("plugin.serialization") version "2.1.10"
 }
@@ -22,7 +27,7 @@ val ktorVersion: String by project
 val logbackVersion: String by project
 
 dependencies {
-	implementation("club.arson.impulse:api:0.3.1-SNAPSHOT")
+	implementation("club.arson.impulse:api:v0.3.1")
 	implementation("org.slf4j:slf4j-api:2.0.7")
 	implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
 	implementation("ch.qos.logback:logback-classic:$logbackVersion")
@@ -39,4 +44,13 @@ tasks.test {
 }
 kotlin {
 	jvmToolchain(21)
+}
+
+application {
+	val name = "io.github.thebestandgreatest"
+	mainClass.set(name)
+}
+
+tasks.withType<ShadowJar> {
+	description = "Crafty Controller broker for Impulse."
 }

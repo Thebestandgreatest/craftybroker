@@ -8,7 +8,9 @@ import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
+import io.ktor.serialization.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.SerialName
@@ -27,25 +29,30 @@ import javax.net.ssl.X509TrustManager
  */
 class CraftyControllerBroker(serverConfig: ServerConfig, private val logger: Logger? = null) : Broker {
 	private var craftyConfig: CraftyControllerBrokerConfig
-	private val client = HttpClient(CIO) {
-		engine {
-			https {
-				trustManager = TrustAllX509TrustManger()
-			}
-		}
-		install(ContentNegotiation) {
-			json(Json {
-				prettyPrint = true
-				isLenient = true
-			})
-		}
-	}
+	private val client: HttpClient
 
 	/**
 	 * Creates a new instance and sets up the broker based on the config
 	 */
 	init {
 		craftyConfig = serverConfig.config as CraftyControllerBrokerConfig
+		client = HttpClient(CIO) {
+			engine {
+				https {
+					if (craftyConfig.insecureMode) {
+						trustManager = TrustAllX509TrustManger()
+						logger?.warn("Running in insecure mode! Only enable this if you absolutely need to")
+					}
+				}
+			}
+			install(ContentNegotiation) {
+				json(Json {
+					prettyPrint = true
+					isLenient = true
+					ignoreUnknownKeys = true
+				})
+			}
+		}
 	}
 
 	override fun address(): Result<InetSocketAddress> {
@@ -56,6 +63,10 @@ class CraftyControllerBroker(serverConfig: ServerConfig, private val logger: Log
 		return runCatching { InetSocketAddress(craftyConfig.address, port) }
 	}
 
+	/**
+	 * Returns the status of the server
+	 * @return Status type representing the server state
+	 */
 	override fun getStatus(): Status {
 		if (apiRequest(RequestType.STATUS).data?.running == true) {
 			return Status.RUNNING
@@ -63,6 +74,9 @@ class CraftyControllerBroker(serverConfig: ServerConfig, private val logger: Log
 		return Status.STOPPED
 	}
 
+	/**
+	 * @return true if the server is running
+	 */
 	override fun isRunning(): Boolean {
 		return getStatus() == Status.RUNNING
 	}
@@ -99,22 +113,21 @@ class CraftyControllerBroker(serverConfig: ServerConfig, private val logger: Log
 
 
 	/**
-	 * Attempts to remove the server
+	 * Attempts to kill the server
 	 *
-	 * If the server is running it will attempt to stop it. Will permanently delete all data associated
-	 * with this server
+	 * Used if the server won't stop for whatever reason
 	 *
 	 * requires CONFIG permission
 	 *
-	 * @return success if the server was removed, else an error
+	 * @return success if the server was killed, else an error
 	 */
 	override fun removeServer(): Result<Unit> {
 		stopServer()
-		if (apiRequest(RequestType.DELETE).status == "ok") {
+		if (apiRequest(RequestType.KILL).status == "ok") {
 			return Result.success(Unit)
 		}
 
-		return Result.failure(Throwable("ERROR! Unable to delete server: ${craftyConfig.serverID}"))
+		return Result.failure(Throwable("ERROR! Unable to kill server: ${craftyConfig.serverID}"))
 	}
 
 
@@ -148,28 +161,42 @@ class CraftyControllerBroker(serverConfig: ServerConfig, private val logger: Log
 		return Result.failure(Throwable("ERROR! Unable to stop server: ${craftyConfig.serverID}"))
 	}
 
+	/**
+	 * Sends an api request to the crafty controller instance
+	 *
+	 * @param type type of the request to send to the server
+	 * @return an ApiData object representing the received data
+	 */
 	private fun apiRequest(type: RequestType): ApiData = runBlocking {
-		val serverID = craftyConfig.serverID
-		val action: String = type.request
-		val token = craftyConfig.token
-		val craftyAddress = craftyConfig.craftyAddress
-
-		val response: ApiData = client.request(craftyAddress) {
-			method = when (type) {
-				RequestType.START -> HttpMethod.Post
-				RequestType.STOP -> HttpMethod.Post
-				RequestType.STATUS -> HttpMethod.Get
-				RequestType.DELETE -> HttpMethod.Delete
-			}
-			url {
-				appendPathSegments(serverID, action)
-			}
-			headers {
-				append(
-					HttpHeaders.Authorization, "Bearer $token"
-				)
-			}
-		}.body()
+		logger?.info("Trying RequestType: $type")
+		var response: ApiData
+		try {
+			response = client.request(craftyConfig.craftyAddress) {
+				method = type.method
+				url {
+					appendPathSegments("api/v2/servers", craftyConfig.serverID, type.request)
+				}
+				headers {
+					append(
+						HttpHeaders.Authorization, "Bearer ${craftyConfig.token}"
+					)
+				}
+			}.body()
+		} catch (e: JsonConvertException) {
+			var responseString: String = client.request(craftyConfig.craftyAddress) {
+				method = type.method
+				url {
+					appendPathSegments("api/v2/servers", craftyConfig.serverID, type.request)
+				}
+				headers {
+					append(
+						HttpHeaders.Authorization, "Bearer ${craftyConfig.token}"
+					)
+				}
+			}.bodyAsText()
+			logger?.info(responseString)
+			response = Json.decodeFromString(responseString)
+		}
 
 		return@runBlocking response
 	}
@@ -177,129 +204,12 @@ class CraftyControllerBroker(serverConfig: ServerConfig, private val logger: Log
 }
 
 /**
- * Basic enum class to categorize all the different valid requests this broker can make, as well as the url for the api to preform those requests
- */
-enum class RequestType(val request: String) {
-	START("action/start_server"),
-	STOP("action/stop_server"),
-	DELETE(""),
-	STATUS("stats")
-}
-
-/**
- * Top level data class for the crafty api response json object
- */
-@Serializable
-data class ApiData(
-	val status: String,
-	val data: ServerData? = null
-)
-
-/**
- * Middle level data class for the crafty api response json object
- */
-@Serializable
-data class ServerData(
-	@SerialName("stats_id")
-	val statsID: Long,
-
-	val created: String,
-
-	@SerialName("server_id")
-	val serverID: ServerConfig,
-
-	val started: String,
-	val running: Boolean,
-	val cpu: Double,
-	val mem: String,
-
-	@SerialName("mem_percent")
-	val memPercent: Double,
-
-	@SerialName("world_name")
-	val worldName: String,
-
-	@SerialName("world_size")
-	val worldSize: String,
-
-	@SerialName("server_port")
-	val serverPort: Long,
-
-	@SerialName("int_ping_results")
-	val intPingResults: String,
-
-	val online: Long,
-	val max: Long,
-	val players: String,
-	val desc: String,
-	val version: String,
-	val updating: Boolean,
-
-	@SerialName("waiting_start")
-	val waitingStart: Boolean,
-
-	@SerialName("first_run")
-	val firstRun: Boolean,
-
-	val crashed: Boolean,
-	val importing: Boolean
-)
-
-/**
- * Bottom level data class for the crafty api response json object
- */
-@Serializable
-data class ServerConfig(
-	@SerialName("server_id")
-	val serverID: String,
-
-	val created: String,
-
-	@SerialName("server_name")
-	val serverName: String,
-
-	val path: String,
-
-	val executable: String,
-
-	@SerialName("log_path")
-	val logPath: String,
-
-	@SerialName("execution_command")
-	val executionCommand: String,
-
-	@SerialName("auto_start")
-	val autoStart: Boolean,
-
-	@SerialName("auto_start_delay")
-	val autoStartDelay: Long,
-
-	@SerialName("crash_detection")
-	val crashDetection: Boolean,
-
-	@SerialName("stop_command")
-	val stopCommand: String,
-
-	@SerialName("executable_update_url")
-	val executableUpdateURL: String,
-
-	@SerialName("server_ip")
-	val serverIP: String,
-
-	@SerialName("server_port")
-	val serverPort: Long,
-
-	@SerialName("logs_delete_after")
-	val logsDeleteAfter: Long,
-
-	val type: String
-)
-
-/**
  * Trust manager class to bypass the self-signed cert that crafty config uses by default by trusting all certs, valid, expired and self signed
  *
  * Horrible thing to do in basically all scenarios, but is probably okay when using a localhost address
  * Use with extreme caution
+ *
+ * Requires the config option insecureMode to be enabled
  *
  * TODO potential fixes for this might including grabbing the crafty controller keys from storage and adding them to the CA list
  */
