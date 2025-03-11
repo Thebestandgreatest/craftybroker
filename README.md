@@ -32,8 +32,8 @@ Need to set crafty as the type
 
 ```yaml
 crafty:
-  serverID: "111111111111"
-  token: ""
+  serverID: "1111111111"
+  token: "asdfjklasfdjklasdfjklasdjfklasdjfklasdjfkl"
   craftyAddress: "https://localhost:8443"
   insecureMode: true
 ```
