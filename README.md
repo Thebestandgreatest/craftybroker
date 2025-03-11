@@ -27,6 +27,7 @@ servers:
   type: "crafty"
 ```
 Required by Impulse
+
 Need to set crafty as the type
 
 ```yaml
