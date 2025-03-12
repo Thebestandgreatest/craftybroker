@@ -1,7 +1,7 @@
 ﻿package io.github.thebestandgreatest
 
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 /**
  * Data class to hold the json response from the crafty controller api
@@ -10,8 +10,11 @@ import kotlinx.serialization.SerialName
 
 @Serializable
 data class ApiData(
-	@SerialName("status") var status: String? = null,
-	@SerialName("data") var data: ServerData? = ServerData()
+	@SerialName("status") var status: String,
+	@SerialName("data") var data: ServerData? = ServerData(),
+	@SerialName("error") var error: String? = null,
+	@SerialName("error_data") var errorData: String? = null,
+	@SerialName("info") var info: String? = null,
 )
 
 @Serializable
