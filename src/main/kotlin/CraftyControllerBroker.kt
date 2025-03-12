@@ -15,8 +15,6 @@ import kotlinx.serialization.json.Json
 import org.slf4j.Logger
 import java.net.InetSocketAddress
 import java.net.SocketException
-import java.security.cert.X509Certificate
-import javax.net.ssl.X509TrustManager
 
 /**
  * This broker is designed to send api requests to a crafty controller instance
@@ -35,12 +33,6 @@ class CraftyControllerBroker(serverConfig: ServerConfig, private val logger: Log
 		craftyConfig = serverConfig.config as CraftyControllerBrokerConfig
 		client = HttpClient(CIO) {
 			engine {
-				https {
-					if (craftyConfig.insecureMode) {
-						trustManager = TrustAllX509TrustManger()
-						logger?.warn("Running in insecure mode! Only enable this if you absolutely need to")
-					}
-				}
 			}
 			install(ContentNegotiation) {
 				json(Json {
@@ -197,21 +189,4 @@ class CraftyControllerBroker(serverConfig: ServerConfig, private val logger: Log
 
 		return@runBlocking response
 	}
-
-}
-
-/**
- * Trust manager class to bypass the self-signed cert that crafty config uses by default by trusting all certs, valid, expired and self signed
- *
- * Horrible thing to do in basically all scenarios, but is probably okay when using a localhost address
- * Use with extreme caution
- *
- * Requires the config option insecureMode to be enabled
- *
- * TODO potential fixes for this might including grabbing the crafty controller keys from storage and adding them to the CA list
- */
-class TrustAllX509TrustManger : X509TrustManager {
-	override fun getAcceptedIssuers(): Array<X509Certificate?> = arrayOfNulls(0)
-	override fun checkClientTrusted(certs: Array<X509Certificate?>?, authType: String?) {}
-	override fun checkServerTrusted(certs: Array<X509Certificate?>?, authType: String?) {}
 }
