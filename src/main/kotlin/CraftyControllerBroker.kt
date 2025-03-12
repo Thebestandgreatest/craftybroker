@@ -8,9 +8,7 @@ import io.ktor.client.call.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
-import io.ktor.client.statement.*
 import io.ktor.http.*
-import io.ktor.serialization.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -182,37 +180,19 @@ class CraftyControllerBroker(serverConfig: ServerConfig, private val logger: Log
 					)
 				}
 			}.body()
-		} catch (e: JsonConvertException) {
-			val responseString: String = client.request(craftyConfig.craftyAddress) {
-				method = type.method
-				url {
-					appendPathSegments("api/v2/servers", craftyConfig.serverID, type.request)
-				}
-				headers {
-					append(
-						HttpHeaders.Authorization, "Bearer ${craftyConfig.token}"
-					)
-				}
-			}.bodyAsText()
-			logger?.debug("invalid json response from crafty api, attempting to fix")
-			logger?.debug(responseString)
-			response = Json.decodeFromString(responseString)
-		} catch (e: SocketException) {
+		} catch (e: SocketException) { // handles if the connection fails because of an improper protocol
 			if (e.message.equals("Connection reset")) {
 				logger?.error("Unable to connect to the api! Check the protocol of the address!")
 				response = ApiData(
 					status = "error",
-					data = null,
-					error = null,
-					errorData = "connection reset",
-					info = null
+					errorData = "Connection reset",
 				)
 			} else {
 				throw e
 			}
 		}
 
-		logger?.debug("valid json returning")
+		logger?.debug("Valid json. Returning...")
 		logger?.debug(response.toString())
 
 		return@runBlocking response
