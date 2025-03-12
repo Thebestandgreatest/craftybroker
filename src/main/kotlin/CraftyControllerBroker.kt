@@ -99,9 +99,7 @@ class CraftyControllerBroker(serverConfig: ServerConfig, private val logger: Log
 	}
 
 	/**
-	 * Attempts to kill the server
-	 *
-	 * Used if the server won't stop for whatever reason
+	 * Attempts to remove the server
 	 *
 	 * requires CONFIG permission
 	 *
@@ -109,12 +107,12 @@ class CraftyControllerBroker(serverConfig: ServerConfig, private val logger: Log
 	 */
 	override fun removeServer(): Result<Unit> {
 		stopServer()
-		val response = apiRequest(RequestType.KILL)
+		val response = apiRequest(RequestType.DELETE)
 		if (response.status == "ok") {
 			return Result.success(Unit)
 		}
-		logger?.error("Unable to send kill request! Error: ${response.errorData}")
-		return Result.failure(Throwable("ERROR! Unable to kill server: ${craftyConfig.serverID}, Error message: ${response.error}"))
+		logger?.error("Unable to send delete request! Error: ${response.errorData}")
+		return Result.failure(Throwable("ERROR! Unable to delete server: ${craftyConfig.serverID}, Error message: ${response.error}"))
 	}
 
 

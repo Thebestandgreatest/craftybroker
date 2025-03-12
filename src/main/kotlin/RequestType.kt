@@ -8,6 +8,7 @@ import io.ktor.http.*
 enum class RequestType(val request: String, val method: HttpMethod) {
 	START("action/start_server", HttpMethod.Post),
 	STOP("action/stop_server", HttpMethod.Post),
-	KILL("action/kill_server", HttpMethod.Post),
-	STATUS("stats", HttpMethod.Get)
+	DELETE("", HttpMethod.Delete),
+	STATUS("stats", HttpMethod.Get),
+	//CREATE("", HttpMethod.Post),
 }
