@@ -25,6 +25,7 @@ repositories {
 
 val ktorVersion: String by project
 val logbackVersion: String by project
+val impulseVersion: String by project
 
 dependencies {
     implementation("club.arson.impulse:api:v0.3.2")

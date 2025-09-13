@@ -14,7 +14,6 @@ class CraftyControllerBrokerFactory : BrokerFactory {
 
 	override val provides: List<String> = listOf("crafty")
 
-
 	/**
 	 * Create a crafty broker from a ServerConfig Object
 	 *

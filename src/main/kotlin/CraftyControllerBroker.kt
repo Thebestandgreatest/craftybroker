@@ -82,7 +82,7 @@ class CraftyControllerBroker(serverConfig: ServerConfig, private val logger: Log
 	override fun getStatus(): Status {
 		val response = apiRequest(RequestType.STATUS)
 		if (response.status != "ok") {
-			logger?.error("Unable to send status request! Error: ${response.info ?: response.errorData}")
+            logger?.error("Unable to send status request to ${craftyConfig.serverID} \n ${response.errorData}")
 			return Status.UNKNOWN
 		}
 		if (response.data?.running == true) {
@@ -101,7 +101,7 @@ class CraftyControllerBroker(serverConfig: ServerConfig, private val logger: Log
 	/**
 	 * Attempts to remove the server
 	 *
-	 * requires CONFIG permission
+	 * Requires CONFIG permission
 	 *
 	 * @return success if the server was killed, else an error
 	 */
@@ -119,35 +119,91 @@ class CraftyControllerBroker(serverConfig: ServerConfig, private val logger: Log
 	/**
 	 * Attempts to start the server
 	 *
-	 * requires COMMANDS permission
+	 * Requires COMMANDS permission
 	 *
 	 * @return success if the server was started, else an error
 	 */
 	override fun startServer(): Result<Unit> {
 		val response = apiRequest(RequestType.START)
-		if (response.status == "ok") {
-			return Result.success(Unit)
-		}
-		logger?.error("Unable to send start request! Error: ${response.errorData}")
-		return Result.failure(Throwable("ERROR! Unable to start server: ${craftyConfig.serverID}, Error message: ${response.error}"))
+
+        return if (response.status == "ok") { // sends a request to the crafty controller api to start the server
+            return if (awaitServerStart().isSuccess) { // polls for the server to start running
+                Result.success(Unit)
+            } else { // server start timed out
+                Result.failure(Throwable("Server failed to start! (timeout)"))
+            }
+        } else { // if unable to send a request, return an error
+            Result.failure(Throwable("Unable to send start command to ${craftyConfig.serverID}"))
+        }
 	}
 
 
 	/**
 	 * Attempts to stop the server
 	 *
-	 * requires COMMANDS permission
+	 * Requires COMMANDS permission
 	 *
 	 * @return success if the server was stopped, else an error
 	 */
 	override fun stopServer(): Result<Unit> {
-		val response = apiRequest(RequestType.STOP)
-		if (response.status == "ok") {
-			return Result.success(Unit)
-		}
-		logger?.error("Unable to send stop request! Error: ${response.errorData}")
-		return Result.failure(Throwable("ERROR! Unable to stop server: ${craftyConfig.serverID}, Error message: ${response.error}"))
+        val response = apiRequest(RequestType.STOP)
+
+        return if (response.status == "ok") { // sends a request to the crafty controller api to start the server
+            return if (awaitServerStop().isSuccess) { // polls for the server to start running
+                Result.success(Unit)
+            } else { // server start timed out
+                Result.failure(Throwable("Server failed to stop! (timeout)"))
+            }
+        } else { // if unable to send a request, return an error
+            Result.failure(Throwable("Unable to send stop command to ${craftyConfig.serverID}"))
+        }
 	}
+
+    /**
+     * Waits for the server to start running, polling for status every 0.1 seconds for 10 seconds
+     * @return success if the server started, else an error
+     */
+    private fun awaitServerStart(): Result<Unit> {
+        val startTime = System.currentTimeMillis()
+        var isRunning = false
+        while (!isRunning && System.currentTimeMillis() - startTime < 10000) {
+            val status = getStatus()
+            if (status == Status.RUNNING) {
+                isRunning = true
+            } else if (status == Status.UNKNOWN) {
+                return Result.failure(Throwable("Server stopped unexpectedly!"))
+            }
+            Thread.sleep(100)
+        }
+        return if (isRunning) {
+            Result.success(Unit)
+        } else {
+            Result.failure(Throwable("Server failed to start! (timeout)"))
+        }
+    }
+
+    /**
+     * Waits for the server to stop running, polling for status every 0.1 seconds for 10 seconds
+     * @return success if the server stopped, else an error
+     */
+    private fun awaitServerStop(): Result<Unit> {
+        val startTime = System.currentTimeMillis()
+        var isRunning = false
+        while (!isRunning && System.currentTimeMillis() - startTime < 10000) {
+            val status = getStatus()
+            if (status == Status.STOPPED) {
+                isRunning = true
+            } else if (status == Status.UNKNOWN) {
+                return Result.failure(Throwable("Server is in unknown state!"))
+            }
+            Thread.sleep(100)
+        }
+        return if (isRunning) {
+            Result.success(Unit)
+        } else {
+            Result.failure(Throwable("Server failed to stop! (timeout)"))
+        }
+    }
 
 	/**
 	 * Sends an api request to the crafty controller api
